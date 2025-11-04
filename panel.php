@@ -38,38 +38,50 @@ function generarCodigoProducto(){
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
 
-    // ----- DEPARTAMENTOS -----
-    if ($action === 'create_dep') {
-        $nombre = trim($_POST['nombre_dep'] ?? '');
-        $estilo = $_POST['estilo_dep'] ?? 'Básica';
-        $descripcion = trim($_POST['descripcion_dep'] ?? '');
-        $stmt = $conn->prepare("INSERT INTO departamentos (nombre_dep, estilo, descripcion) VALUES (?, ?, ?)");
-        $stmt->bind_param("sss", $nombre, $estilo, $descripcion);
-        $stmt->execute();
-        header("Location: panel.php");
-        exit();
-    }
 
-    if ($action === 'edit_dep') {
-        $id = intval($_POST['id_dep'] ?? 0);
-        $nombre = trim($_POST['nombre_dep'] ?? '');
-        $estilo = $_POST['estilo_dep'] ?? 'Básica';
-        $descripcion = trim($_POST['descripcion_dep'] ?? '');
-        $stmt = $conn->prepare("UPDATE departamentos SET nombre_dep=?, estilo=?, descripcion=? WHERE id_dep=?");
-        $stmt->bind_param("sssi", $nombre, $estilo, $descripcion, $id);
-        $stmt->execute();
-        header("Location: panel.php");
-        exit();
-    }
+// ----- DEPARTAMENTOS -----
+if ($action === 'create_dep') {
+    $nombre = trim($_POST['nombre_dep'] ?? '');
+    $tipo = $_POST['tipo_dep'] ?? 'Básica';
+    $descripcion = trim($_POST['descripcion_dep'] ?? '');
 
-    if ($action === 'delete_dep') {
-        $id = intval($_POST['id_dep'] ?? 0);
-        $stmt = $conn->prepare("DELETE FROM departamentos WHERE id_dep=?");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        header("Location: panel.php");
-        exit();
+    $stmt = $conn->prepare("INSERT INTO departamentos (nombre_dep, tipo, descripcion) VALUES (?, ?, ?)");
+    if (!$stmt) {
+        die("Error en prepare(): " . $conn->error);
     }
+    $stmt->bind_param("sss", $nombre, $tipo, $descripcion);
+    $stmt->execute();
+    header("Location: panel.php");
+    exit();
+}
+
+if ($action === 'edit_dep') {
+    $id = intval($_POST['id_dep'] ?? 0);
+    $nombre = trim($_POST['nombre_dep'] ?? '');
+    $tipo = $_POST['tipo_dep'] ?? 'Básica';
+    $descripcion = trim($_POST['descripcion_dep'] ?? '');
+
+    $stmt = $conn->prepare("UPDATE departamentos SET nombre_dep=?, tipo=?, descripcion=? WHERE id_dep=?");
+    if (!$stmt) {
+        die("Error en prepare(): " . $conn->error);
+    }
+    $stmt->bind_param("sssi", $nombre, $tipo, $descripcion, $id);
+    $stmt->execute();
+    header("Location: panel.php");
+    exit();
+}
+
+if ($action === 'delete_dep') {
+    $id = intval($_POST['id_dep'] ?? 0);
+    $stmt = $conn->prepare("DELETE FROM departamentos WHERE id_dep=?");
+    if (!$stmt) {
+        die("Error en prepare(): " . $conn->error);
+    }
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    header("Location: panel.php");
+    exit();
+}
 
     // ----- CATEGORÍAS -----
     if ($action === 'create_cat') {
@@ -172,69 +184,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit();
     }
 
-    // ----- STOCK -----
-    if ($action === 'update_stock') {
-        $id_producto = intval($_POST['id_producto_stock'] ?? 0);
-        $cantidad = intval($_POST['cantidad_stock'] ?? 0);
-        // comprobar si existe
-        $res = $conn->query("SELECT id_stock FROM stock WHERE id_producto=$id_producto");
-        if ($res && $res->num_rows > 0) {
-            $stmt = $conn->prepare("UPDATE stock SET cantidad=? WHERE id_producto=?");
-            $stmt->bind_param("ii", $cantidad, $id_producto);
-            $stmt->execute();
+
+// ----- STOCK -----
+// --- Manejo de acciones (Agregar/Actualizar/Eliminar) ---
+
+
+
+
+if (isset($_POST['action']) && $_POST['action'] === 'update_stock') {
+    $id_producto = intval($_POST['id_producto_stock'] ?? 0);
+    
+   $cantidad_nueva = intval($_POST['cantidad_stock'] ?? 0);
+
+    // valores adicionales
+    $id_dep = null;
+    $id_departamento = null;
+    $fecha = date('Y-m-d H:i:s');
+
+    if ($id_producto <= 0) {
+        header("Location: panel.php#pills-stock");
+        exit;
+    }
+
+    // Verificar si el producto ya existe en stock
+    $check = $conn->prepare("SELECT id_stock, cantidad FROM stock WHERE id_producto = ?");
+    $check->bind_param("i", $id_producto);
+    $check->execute();
+    $res = $check->get_result();
+
+    if ($res && $res->num_rows > 0) {
+        $row = $res->fetch_assoc();
+        $cantidad_actual = intval($row['cantidad']);
+        $id_stock = intval($row['id_stock']);
+
+        // Determinar tipo de movimiento
+        if ($cantidad_nueva > $cantidad_actual) {
+            $tipo_movimiento = 'entrada';
+        } elseif ($cantidad_nueva < $cantidad_actual) {
+            $tipo_movimiento = 'salida';
         } else {
-            $stmt = $conn->prepare("INSERT INTO stock (id_producto, cantidad) VALUES (?, ?)");
-            $stmt->bind_param("ii", $id_producto, $cantidad);
-            $stmt->execute();
+            $tipo_movimiento = 'sin cambio';
         }
-        header("Location: panel.php");
-        exit();
+
+        // Actualizar stock
+        $stmt = $conn->prepare("UPDATE stock SET cantidad = ?, tipo_movimiento = ?, fecha = ? WHERE id_stock = ?");
+        $stmt->bind_param("issi", $cantidad_nueva, $tipo_movimiento, $fecha, $id_stock);
+        $stmt->execute();
+        $stmt->close();
+
+    } else {
+        // Si no existe, insertar nuevo
+        $tipo_movimiento = 'ingreso';
+        $stmt = $conn->prepare("INSERT INTO stock (id_producto, cantidad, id_dep, id_departamento, tipo_movimiento, fecha)
+                                VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("iiiiss", $id_producto, $cantidad_nueva, $id_dep, $id_departamento, $tipo_movimiento, $fecha);
+        $stmt->execute();
+        $stmt->close();
     }
 
-    if ($action === 'delete_stock') {
-        $id = intval($_POST['id_stock'] ?? 0);
-        $stmt = $conn->prepare("DELETE FROM stock WHERE id_stock=?");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        header("Location: panel.php");
-        exit();
-    }
+    $check->close();
+    header("Location: panel.php#pills-stock");
+    exit;
+    
 
-    // ----- ACTIVOS -----
-    if ($action === 'create_act') {
-        $codigo = trim($_POST['codigo_act'] ?? '');
-        $nombre = trim($_POST['nombre_act'] ?? '');
-        $id_categoria = intval($_POST['id_categoria_act'] ?? 0);
-        $fecha_ingreso = $_POST['fecha_ingreso_act'] ?? null;
-        $descripcion = trim($_POST['descripcion_act'] ?? '');
-        $stmt = $conn->prepare("INSERT INTO activos (codigo, nombre, id_categoria, fecha_ingreso, descripcion) VALUES (?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssiss", $codigo, $nombre, $id_categoria, $fecha_ingreso, $descripcion);
-        $stmt->execute();
-        header("Location: panel.php");
-        exit();
-    }
+}
 
-    if ($action === 'edit_act') {
-        $id = intval($_POST['id_act'] ?? 0);
-        $nombre = trim($_POST['nombre_act'] ?? '');
-        $id_categoria = intval($_POST['id_categoria_act'] ?? 0);
-        $fecha_ingreso = $_POST['fecha_ingreso_act'] ?? null;
-        $descripcion = trim($_POST['descripcion_act'] ?? '');
-        $stmt = $conn->prepare("UPDATE activos SET nombre=?, id_categoria=?, fecha_ingreso=?, descripcion=? WHERE id=?");
-        $stmt->bind_param("sissi", $nombre, $id_categoria, $fecha_ingreso, $descripcion, $id);
-        $stmt->execute();
-        header("Location: panel.php");
-        exit();
-    }
 
-    if ($action === 'delete_act') {
-        $id = intval($_POST['id_act'] ?? 0);
-        $stmt = $conn->prepare("DELETE FROM activos WHERE id=?");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        header("Location: panel.php");
-        exit();
-    }
+if ($action === 'delete_stock') {
+    $id_stock = intval($_POST['id_stock'] ?? 0);
+    $stmt = $conn->prepare("DELETE FROM stock WHERE id_stock=?");
+    $stmt->bind_param("i", $id_stock);
+    $stmt->execute();
+
+    header("Location: panel.php");
+    exit();
+}
+
 
     // ----- ALERTAS -----
     if ($action === 'create_alert') {
@@ -407,41 +432,53 @@ body {
   </ul>
 
   <div class="tab-content" id="pills-tabContent">
-    <!-- ========== DEPARTAMENTOS TAB ========== -->
-    <div class="tab-pane fade show active" id="pills-dep" role="tabpanel">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h5>Departamentos</h5>
-        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCreateDep"><i class="fa-solid fa-plus"></i> Nuevo</button>
-      </div>
-      <div class="table-responsive">
-        <table class="table table-hover table-fixed">
-          <thead class="table-light">
-            <tr><th>ID</th><th>Nombre</th><th>session</th><th>Descripción</th><th>Acciones</th></tr>
-          </thead>
-          <tbody>
-            <?php if ($departamentos && $departamentos->num_rows > 0): ?>
-              <?php $departamentos->data_seek(0); while($d = $departamentos->fetch_assoc()): ?>
-                <tr>
-                  <td><?= $d['id_dep'] ?></td>
-                  <td><?= htmlspecialchars($d['nombre_dep']) ?></td>
-                  
-<td><?= htmlspecialchars($d['nombre_dep']) ?></td>
+<!-- ========== DEPARTAMENTOS TAB ========== -->
+<div class="tab-pane fade show active" id="pills-dep" role="tabpanel">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h5>Departamentos</h5>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCreateDep">
+      <i class="fa-solid fa-plus"></i> Nuevo
+    </button>
+  </div>
 
-
-                  <td><?= htmlspecialchars($d['descripcion']) ?></td>
-                  <td class="text-center">
-                    <button class="btn btn-sm btn-outline-secondary" onclick='openEditDep(<?= json_encode($d, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'><i class="fa-solid fa-pen"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" onclick='openDeleteDep(<?= $d['id_dep'] ?>)'><i class="fa-solid fa-trash"></i></button>
-                  </td>
-                </tr>
-              <?php endwhile; ?>
-            <?php else: ?>
-              <tr><td colspan="5" class="text-center text-muted">No hay departamentos registrados</td></tr>
-            <?php endif; ?>
-          </tbody>
-        </table>
-      </div>
-    </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-fixed">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Tipo</th> <!-- antes decía "session" -->
+          <th>Descripción</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php if ($departamentos && $departamentos->num_rows > 0): ?>
+          <?php $departamentos->data_seek(0); while($d = $departamentos->fetch_assoc()): ?>
+            <tr>
+              <td><?= $d['id_dep'] ?></td>
+              <td><?= htmlspecialchars($d['nombre_dep']) ?></td>
+              <td><?= htmlspecialchars($d['tipo']) ?></td> <!-- muestra el tipo -->
+              <td><?= htmlspecialchars($d['descripcion']) ?></td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-outline-secondary" 
+                        onclick='openEditDep(<?= json_encode($d, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+                        <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" 
+                        onclick='openDeleteDep(<?= $d['id_dep'] ?>)'>
+                        <i class="fa-solid fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+          <?php endwhile; ?>
+        <?php else: ?>
+          <tr><td colspan="5" class="text-center text-muted">No hay departamentos registrados</td></tr>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
 
     <!-- ========== CATEGORÍAS TAB ========== -->
     <div class="tab-pane fade" id="pills-cat" role="tabpanel">
@@ -606,53 +643,93 @@ body {
 ============================ -->
 
 <!-- ---------- Departamentos: Create / Edit / Delete ---------- -->
-<div class="modal fade" id="modalCreateDep" tabindex="-1"><div class="modal-dialog"><form class="modal-content" method="POST" action="panel.php">
-  <div class="modal-header"><h5 class="modal-title">Nuevo Departamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-  <div class="modal-body">
-    <input type="hidden" name="action" value="create_dep">
-    <div class="mb-3"><label class="form-label">Nombre</label>
-      <input type="text" class="form-control" name="nombre_dep" required placeholder="Ej: Biblioteca"></div>
-    <div class="mb-3"><label class="form-label">Session</label>
-      <select class="form-select" name="estilo_dep" required>
-        <option value="Básica">Básica</option>
-        <option value="Media">Media</option>
-        <option value="Épica">Épica</option>
-      </select>
-    </div>
-    <div class="mb-3"><label class="form-label">Descripción</label>
-      <textarea class="form-control" name="descripcion_dep" rows="3"></textarea>
-    </div>
+<div class="modal fade" id="modalCreateDep" tabindex="-1">
+  <div class="modal-dialog">
+    <form class="modal-content" method="POST" action="panel.php">
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo Departamento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" name="action" value="create_dep">
+        <div class="mb-3">
+          <label class="form-label">Nombre</label>
+          <input type="text" class="form-control" name="nombre_dep" required placeholder="Ej: Biblioteca">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Tipo</label>
+          <select class="form-select" name="tipo_dep" required>
+            <option value="Basica">Basica</option>
+            <option value="Media">Media</option>
+            <option value="EPA">EPA</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Descripción</label>
+          <textarea class="form-control" name="descripcion_dep" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-success" type="submit">Guardar</button>
+      </div>
+    </form>
   </div>
-  <div class="modal-footer"><button class="btn btn-success" type="submit">Guardar</button></div>
-</form></div></div>
+</div>
 
-<div class="modal fade" id="modalEditDep" tabindex="-1"><div class="modal-dialog"><form class="modal-content" method="POST" action="panel.php">
-  <div class="modal-header"><h5 class="modal-title">Editar Departamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-  <div class="modal-body">
-    <input type="hidden" name="action" value="edit_dep">
-    <input type="hidden" name="id_dep" id="edit_dep_id">
-    <div class="mb-3"><label class="form-label">Nombre</label><input type="text" class="form-control" name="nombre_dep" id="edit_dep_nombre" required></div>
-    <div class="mb-3"><label class="form-label">Session</label>
-      <select class="form-select" name="estilo_dep" id="edit_dep_estilo" required>
-        <option value="Básica">Básica</option>
-        <option value="Media">Media</option>
-        <option value="Épica">Épica</option>
-      </select>
-    </div>
-    <div class="mb-3"><label class="form-label">Descripción</label><textarea class="form-control" name="descripcion_dep" id="edit_dep_descripcion" rows="3"></textarea></div>
+<div class="modal fade" id="modalEditDep" tabindex="-1">
+  <div class="modal-dialog">
+    <form class="modal-content" method="POST" action="panel.php">
+      <div class="modal-header">
+        <h5 class="modal-title">Editar Departamento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" name="action" value="edit_dep">
+        <input type="hidden" name="id_dep" id="edit_dep_id">
+        <div class="mb-3">
+          <label class="form-label">Nombre</label>
+          <input type="text" class="form-control" name="nombre_dep" id="edit_dep_nombre" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Tipo</label>
+          <select class="form-select" name="tipo_dep" id="edit_dep_tipo" required>
+            <option value="Basica">Basica</option>
+            <option value="Media">Media</option>
+            <option value="EPA">EPA</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Descripción</label>
+          <textarea class="form-control" name="descripcion_dep" id="edit_dep_descripcion" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-success" type="submit">Actualizar</button>
+      </div>
+    </form>
   </div>
-  <div class="modal-footer"><button class="btn btn-success" type="submit">Actualizar</button></div>
-</form></div></div>
+</div>
 
-<div class="modal fade" id="modalDeleteDep" tabindex="-1"><div class="modal-dialog"><form class="modal-content" method="POST" action="panel.php">
-  <div class="modal-header"><h5 class="modal-title">Eliminar Departamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-  <div class="modal-body">
-    <input type="hidden" name="action" value="delete_dep">
-    <input type="hidden" name="id_dep" id="del_dep_id">
-    <p>¿Desea eliminar este departamento?</p>
+
+<!-- ---------- Eliminar Departamento ---------- -->
+<div class="modal fade" id="modalDeleteDep" tabindex="-1">
+  <div class="modal-dialog">
+    <form class="modal-content" method="POST" action="panel.php">
+      <div class="modal-header">
+        <h5 class="modal-title">Eliminar Departamento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" name="action" value="delete_dep">
+        <input type="hidden" name="id_dep" id="del_dep_id">
+        <p>¿Desea eliminar este departamento?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" type="submit">Eliminar</button>
+      </div>
+    </form>
   </div>
-  <div class="modal-footer"><button class="btn btn-danger" type="submit">Eliminar</button></div>
-</form></div></div>
+</div>
 
 <!-- ---------- Categorías: Create / Edit / Delete ---------- -->
 <div class="modal fade" id="modalCreateCat" tabindex="-1"><div class="modal-dialog"><form class="modal-content" method="POST" action="panel.php">
@@ -760,7 +837,7 @@ body {
   <div class="modal-footer"><button class="btn btn-danger" type="submit">Eliminar</button></div>
 </form></div></div>
 
-<!-- ---------- Stock: Update / Delete ---------- -->
+<!-- ---------- stock: update/ Delete ---------- -->
 <div class="modal fade" id="modalUpdateStock" tabindex="-1"><div class="modal-dialog"><form class="modal-content" method="POST" action="panel.php">
   <div class="modal-header"><h5 class="modal-title">Actualizar Stock</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
   <div class="modal-body">
@@ -883,7 +960,7 @@ body {
 function openEditDep(data){
   document.getElementById('edit_dep_id').value = data.id_dep;
   document.getElementById('edit_dep_nombre').value = data.nombre_dep;
-  document.getElementById('edit_dep_estilo').value = data.estilo;
+  document.getElementById('edit_dep_tipo').value = data.tipo;
   document.getElementById('edit_dep_descripcion').value = data.descripcion;
   new bootstrap.Modal(document.getElementById('modalEditDep')).show();
 }

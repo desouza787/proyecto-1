@@ -26,7 +26,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $user = $result->fetch_assoc();
         if (password_verify($password, $user['password'])) {
             $_SESSION['usuario'] = $user['nombre'];
-            header("Location: panel.php");
+            header("Location: dashboard.php");
             exit();
         } else {
             $message = "<div class='alert error'>❌ Contraseña incorrecta</div>";
