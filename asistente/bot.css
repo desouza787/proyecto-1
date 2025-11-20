@@ -1,0 +1,120 @@
+#asistente-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9999;
+  font-family: "Poppins", sans-serif;
+  pointer-events: none; /* permite clics a lo que está detrás */
+}
+
+/* El robot sigue siendo clicable */
+#robot {
+  width: 100px;
+  height: 100px;
+  cursor: pointer;
+  animation: flotar 3s ease-in-out infinite;
+  pointer-events: auto; /* solo el robot recibe clics */
+}
+
+#robot-img {
+  width: 100%;
+  height: auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  transition: transform 0.3s ease;
+}
+
+#robot-img:hover {
+  transform: scale(1.1);
+}
+
+@keyframes flotar {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* Chat container: cerrado no bloquea nada */
+#chat-container {
+  width: 320px;
+  height: 420px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 6px 25px rgba(0,0,0,0.3);
+  overflow: hidden;
+  display: none; /* completamente oculto cuando está cerrado */
+  flex-direction: column;
+  position: absolute;
+  bottom: 110px;
+  right: 0;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.4s ease;
+  pointer-events: none; /* no bloquea nada mientras está cerrado */
+}
+
+/* Cuando se abre, se muestra y es interactivo */
+#chat-container.visible {
+  display: flex;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto; /* ahora sí recibe clics */
+}
+
+#chat-header {
+  background: #4b9cdb;
+  color: white;
+  padding: 10px;
+  font-weight: bold;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#cerrar-chat {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+#chat-mensajes {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+#chat-input-container {
+  display: flex;
+  border-top: 1px solid #ccc;
+}
+
+#chat-input {
+  flex: 1;
+  border: none;
+  padding: 10px;
+  outline: none;
+}
+
+#chat-enviar {
+  background: #4b9cdb;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  cursor: pointer;
+  border-radius: 0 0 20px 0;
+}
+
+#chat-enviar:hover {
+  background: #367fbf;
+}
+
+/* Mensajes */
+#chat-mensajes p { margin: 8px 0; padding: 6px 10px; border-radius: 8px; }
+#chat-mensajes p:nth-child(odd) { background: #f1f1f1; text-align: left; }
+#chat-mensajes p:nth-child(even) { background: #d0e6ff; text-align: right; }
+
+/* "pensando..." */
+.pensando { font-style: italic; opacity: 0.8; color: #666; }
