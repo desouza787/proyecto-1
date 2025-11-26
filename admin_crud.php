@@ -106,10 +106,139 @@ $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc(
 ?> 
 
 <div class="container mt-4"> 
+
+    <!-- ====== ESTILOS ESPECÍFICOS PARA LAS TABLAS (SOLO VISUAL) ====== -->
+    <style>
+    /* Contenedor y header */
+    .fancy-table-container { --accent: 38, 80, 185; } /* puedes ajustar color con RGB */
+
+    /* Tabla base */
+    table.fancy-table {
+        border-collapse: separate;
+        border-spacing: 0;
+        background: transparent;
+        overflow: visible;
+        width: 100%;
+        --row-elevation: 8px;
+    }
+
+    /* Sticky header con degradado elegante */
+    table.fancy-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: linear-gradient(90deg, rgba(23,31,43,1) 0%, rgba(28,41,58,1) 100%);
+        color: #fff;
+        border: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-weight: 700;
+        padding: .9rem .75rem;
+        box-shadow: 0 6px 14px rgba(10, 14, 20, 0.25);
+    }
+
+    /* Filas: ligera separación, sombra y border-radius en celdas */
+    table.fancy-table tbody tr {
+        background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,250,250,0.98) 100%);
+        transition: transform .22s cubic-bezier(.2,.9,.2,1), box-shadow .22s, background .22s;
+        transform-origin: left center;
+        border-radius: 10px;
+        margin-bottom: 8px;
+        overflow: hidden;
+        box-shadow: 0 0 0 rgba(0,0,0,0);
+        display: table-row;
+        animation: fadeInUp .45s both;
+    }
+
+    /* Hover: mini-zoom y elevación */
+    table.fancy-table tbody tr:hover {
+        transform: translateY(-6px) scale(1.006);
+        box-shadow: 0 18px 35px rgba(22,28,36,0.12);
+        background: linear-gradient(90deg, rgba(255,255,255,1) 0%, rgba(247,250,255,1) 100%);
+    }
+
+    /* Celdas: padding y separación */
+    table.fancy-table tbody td, table.fancy-table thead th {
+        padding: .85rem .85rem;
+        vertical-align: middle;
+        border-bottom: 0;
+        font-size: .95rem;
+    }
+
+    /* Primera columna ID más ligera */
+    table.fancy-table tbody td:first-child {
+        font-weight: 600;
+        color: #374151;
+        width: 60px;
+    }
+
+    /* Descripción más clara */
+    table.fancy-table tbody td:nth-child(4) {
+        color: #4b5563;
+        line-height: 1.45;
+    }
+
+    /* Badges modernizados */
+    table.fancy-table .badge {
+        border-radius: 10px;
+        padding: .35rem .6rem;
+        font-weight: 600;
+        box-shadow: 0 6px 14px rgba(2,6,23,0.06);
+        transition: transform .18s, box-shadow .18s;
+        display: inline-block;
+    }
+    table.fancy-table .badge.bg-success:hover,
+    table.fancy-table .badge.bg-danger:hover {
+        transform: translateY(-3px) scale(1.04);
+        box-shadow: 0 10px 24px rgba(2,6,23,0.12);
+    }
+
+    /* Botones de acciones: animación y estilo */
+    .fancy-table .btn {
+        transition: transform .16s cubic-bezier(.2,.9,.2,1), box-shadow .16s;
+        box-shadow: 0 6px 12px rgba(13,22,36,0.06);
+        border-radius: 8px;
+        padding: .35rem .5rem;
+    }
+    .fancy-table .btn:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 18px 30px rgba(12,18,30,0.12); }
+
+    /* Icon buttons styling (si usas emojis o iconos) */
+    .fancy-table .btn-sm { font-size: .86rem; }
+
+    /* Separador entre filas estilo cards (no cambia la estructura) */
+    table.fancy-table tbody tr + tr {
+        margin-top: 10px;
+    }
+
+    /* Zebra sutil */
+    table.fancy-table tbody tr:nth-child(odd) { background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,249,250,0.98) 100%); }
+
+    /* Animación de entrada */
+    @keyframes fadeInUp {
+        0% { opacity: 0; transform: translateY(8px) scale(.998); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Header tiny label for table titles area (optional visual) */
+    .table-section-title { display:flex; align-items:center; gap:.5rem; }
+
+    /* Ajustes responsivos para pantallas pequeñas */
+    @media (max-width: 768px) {
+        table.fancy-table thead { display: none; } /* mantén los headers ocultos en móvil si lo prefieres */
+        table.fancy-table tbody td {
+            display: block;
+            padding: .65rem .75rem;
+        }
+        table.fancy-table tbody tr { margin-bottom: .8rem; display: block; border-radius: 8px; }
+        /* reajusta botones a la derecha */
+        .fancy-actions { display:flex; gap:.5rem; justify-content:flex-end; }
+    }
+    </style>
+
     <!-- Título --> 
     <h2 class="mb-4 text-center text-primary"><i class="fa-solid fa-gear"></i> Administración General</h2> 
 
-    <!-- Tarjetas resumen --> 
+    <!-- Tarjetas resumen (SIN CAMBIOS de lógica ni visual mayor) --> 
     <div class="row g-3 mb-4"> 
         <div class="col-md-3"> 
             <div class="card shadow-sm border-primary h-100"> 
@@ -179,7 +308,7 @@ $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc(
                     <i class="fa-solid fa-plus"></i> Nuevo Anexo 
                 </button> 
             </div> 
-            <table class="table table-hover table-striped" id="tableAnexos"> 
+            <table class="table table-hover table-striped fancy-table" id="tableAnexos"> 
                 <thead class="table-dark"> 
                     <tr> 
                         <th>ID</th> 
@@ -198,8 +327,8 @@ $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc(
                         <td><?= e($d['tipo']) ?></td> 
                         <td><?= e($d['descripcion']) ?></td> 
                         <td><span class="badge <?= $equiposCount>0?'bg-danger':'bg-success' ?>"><?= $equiposCount ?></span></td> 
-                        <td> 
-                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAnexo" data-id="<?= $d['id_dep'] ?>" data-nombre="<?= e($d['nombre_dep']) ?>" data-tipo="<?= e($d['tipo']) ?>" data-desc="<?= e($d['descripcion']) ?>">✏️ </button> 
+                        <td class="fancy-actions"> 
+                            <button class="btn btn-primary btn-sm editAnexo" data-bs-toggle="modal" data-bs-target="#modalAnexo" data-id="<?= $d['id_dep'] ?>" data-nombre="<?= e($d['nombre_dep']) ?>" data-tipo="<?= e($d['tipo']) ?>" data-desc="<?= e($d['descripcion']) ?>">✏️ </button> 
                             <button class="btn btn-danger btn-sm" <?= $equiposCount>0?'disabled title="No se puede eliminar, tiene equipos asociados"':'onclick="if(confirm(\'Eliminar anexo?\')) location.href=\'?eliminar_anexo='.$d['id_dep'].'\'"' ?>> 🗑️ </button> 
                         </td> 
                     </tr> 
@@ -216,7 +345,7 @@ $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc(
                     <i class="fa-solid fa-plus"></i> Nueva Ubicación 
                 </button> 
             </div> 
-            <table class="table table-hover table-striped" id="tableUbicaciones"> 
+            <table class="table table-hover table-striped fancy-table" id="tableUbicaciones"> 
                 <thead class="table-dark"> 
                     <tr> 
                         <th>ID</th> 
@@ -235,8 +364,8 @@ $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc(
                         <td><?= e($u['nivel']) ?></td> 
                         <td><?= e($u['descripcion']) ?></td> 
                         <td><span class="badge <?= $equiposCount>0?'bg-danger':'bg-success' ?>"><?= $equiposCount ?></span></td> 
-                        <td> 
-                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalUbicacion" data-id="<?= $u['id_ubicacion'] ?>" data-nombre="<?= e($u['nombre']) ?>" data-nivel="<?= e($u['nivel']) ?>" data-desc="<?= e($u['descripcion']) ?>">✏️ </button> 
+                        <td class="fancy-actions"> 
+                            <button class="btn btn-primary btn-sm editUbicacion" data-bs-toggle="modal" data-bs-target="#modalUbicacion" data-id="<?= $u['id_ubicacion'] ?>" data-nombre="<?= e($u['nombre']) ?>" data-nivel="<?= e($u['nivel']) ?>" data-desc="<?= e($u['descripcion']) ?>">✏️ </button> 
                             <button class="btn btn-danger btn-sm" <?= $equiposCount>0?'disabled title="No se puede eliminar, tiene equipos asociados"':'onclick="if(confirm(\'Eliminar ubicación?\')) location.href=\'?eliminar_ubicacion='.$u['id_ubicacion'].'\'"' ?>> 🗑️ </button> 
                         </td> 
                     </tr> 
@@ -253,7 +382,7 @@ $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc(
                     <i class="fa-solid fa-plus"></i> Nueva Categoría 
                 </button> 
             </div> 
-            <table class="table table-hover table-striped" id="tableCategorias"> 
+            <table class="table table-hover table-striped fancy-table" id="tableCategorias"> 
                 <thead class="table-dark"> 
                     <tr> 
                         <th>ID</th> 
@@ -270,8 +399,8 @@ $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc(
                         <td><?= e($c['nombre_categoria']) ?></td> 
                         <td><?= e($c['descripcion']) ?></td> 
                         <td><span class="badge <?= $equiposCount>0?'bg-danger':'bg-success' ?>"><?= $equiposCount ?></span></td> 
-                        <td> 
-                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCategoria" data-id="<?= $c['id_categoria'] ?>" data-nombre="<?= e($c['nombre_categoria']) ?>" data-desc="<?= e($c['descripcion']) ?>">✏️ </button> 
+                        <td class="fancy-actions"> 
+                            <button class="btn btn-primary btn-sm editCategoria" data-bs-toggle="modal" data-bs-target="#modalCategoria" data-id="<?= $c['id_categoria'] ?>" data-nombre="<?= e($c['nombre_categoria']) ?>" data-desc="<?= e($c['descripcion']) ?>">✏️ </button> 
                             <button class="btn btn-danger btn-sm" <?= $equiposCount>0?'disabled title="No se puede eliminar, tiene equipos asociados"':'onclick="if(confirm(\'Eliminar categoría?\')) location.href=\'?eliminar_categoria='.$c['id_categoria'].'\'"' ?>> 🗑️ </button> 
                         </td> 
                     </tr> 
@@ -327,7 +456,7 @@ $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc(
             <div class="modal-body"> 
                 <input type="hidden" name="id_categoria" id="cat_id"> 
                 <div class="mb-3"><label>Nombre</label><input type="text" name="nombre_categoria" id="cat_nombre" class="form-control" required></div> 
-                <div class="mb-3"><label>Descripción</label><textarea name="descripcion" id="cat_desc" class="form-control"></textarea></div> 
+                <div class="mb-3"><label>Descripción</label><textarea name="descripcion_categoria" id="cat_desc" class="form-control"></textarea></div> 
             </div> 
             <div class="modal-footer"> 
                 <button type="submit" name="guardar_categoria" class="btn btn-success">Guardar</button> 
@@ -336,44 +465,50 @@ $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc(
     </div> 
 </div> 
 
-<!-- TOASTS --> 
-<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11"> 
-    <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true"> 
-        <div class="toast-header"> 
-            <strong class="me-auto">Notificación</strong> 
-            <button type="button" class="btn-close" data-bs-dismiss="toast"></button> 
-        </div> 
-        <div class="toast-body" id="toastBody"></div> 
-    </div> 
-</div> 
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // Anexo
+    document.querySelectorAll(".editAnexo").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.getElementById("dep_id").value = btn.dataset.id;
+            document.getElementById("dep_nombre").value = btn.dataset.nombre;
+            document.getElementById("dep_tipo").value = btn.dataset.tipo;
+            document.getElementById("dep_desc").value = btn.dataset.desc;
+        });
+    });
+    // Ubicacion
+    document.querySelectorAll(".editUbicacion").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.getElementById("ubi_id").value = btn.dataset.id;
+            document.getElementById("ubi_nombre").value = btn.dataset.nombre;
+            document.getElementById("ubi_nivel").value = btn.dataset.nivel;
+            document.getElementById("ubi_desc").value = btn.dataset.desc;
+        });
+    });
+    // Categoria
+    document.querySelectorAll(".editCategoria").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.getElementById("cat_id").value = btn.dataset.id;
+            document.getElementById("cat_nombre").value = btn.dataset.nombre;
+            document.getElementById("cat_desc").value = btn.dataset.desc;
+        });
+    });
 
-<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script> 
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css"> 
+    // --- STAGGER FADE-IN PARA FILAS (SOLO VISUAL) ---
+    document.querySelectorAll('table.fancy-table tbody').forEach(tbody=>{
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.forEach((r, i) => {
+            r.style.animationDelay = (i * 70) + 'ms';
+        });
+    });
 
-<script> 
-$(document).ready(function(){ 
-    $('#tableAnexos').DataTable({ pageLength:5, lengthChange:false }); 
-    $('#tableUbicaciones').DataTable({ pageLength:5, lengthChange:false }); 
-    $('#tableCategorias').DataTable({ pageLength:5, lengthChange:false }); 
-
-    <?php if(isset($_SESSION['toast'])): ?> 
-        var toastEl = document.getElementById('liveToast'); 
-        document.getElementById('toastBody').innerText = "<?= $_SESSION['toast'] ?>"; 
-        var toast = new bootstrap.Toast(toastEl); 
-        toast.show(); 
-        <?php unset($_SESSION['toast']); ?> 
-    <?php endif; ?> 
-
-    <?php if(isset($_SESSION['toast_error'])): ?> 
-        var toastEl = document.getElementById('liveToast'); 
-        document.getElementById('toastBody').innerText = "<?= $_SESSION['toast_error'] ?>"; 
-        toastEl.querySelector('.toast-header strong').innerText = "Error"; 
-        var toast = new bootstrap.Toast(toastEl); 
-        toast.show(); 
-        <?php unset($_SESSION['toast_error']); ?> 
-    <?php endif; ?> 
-}); 
-</script> 
+    // Pequeña mejora: hover sobre badge para dar feedback (no cambia lógica)
+    document.querySelectorAll('table.fancy-table .badge').forEach(b => {
+        b.addEventListener('mouseenter', ()=> b.style.transform = 'translateY(-3px) scale(1.04)');
+        b.addEventListener('mouseleave', ()=> b.style.transform = '');
+    });
+});
+</script>
 
 <?php require_once "includes/footer.php"; ?> 
-<?php include 'asistente/bot.php'; ?> 
+<?php include 'asistente/bot.php'; ?>

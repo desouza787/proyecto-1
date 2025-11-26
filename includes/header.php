@@ -120,6 +120,13 @@ aside{min-height:100vh;border-right:1px solid #e9eef6;}
         </a>
       </li>
 
+      <!-- NUEVA SECCIÓN MANTENEDORES -->
+      <li class="nav-item">
+        <a class="nav-link d-flex align-items-center gap-2 <?= basename($_SERVER['PHP_SELF'])==='mantenedores.php'?'active':'' ?>" href="mantenedores.php">
+          <i class="fa-solid fa-folder-tree"></i> <span>Mantenedores</span>
+        </a>
+      </li>
+
       <?php if($rol === 'Administrador'): ?>
       <li class="nav-item">
         <a class="nav-link d-flex align-items-center gap-2 <?= basename($_SERVER['PHP_SELF'])==='usuarios.php'?'active':'' ?>" href="usuarios.php">
@@ -129,6 +136,5 @@ aside{min-height:100vh;border-right:1px solid #e9eef6;}
       <?php endif; ?>
     </ul>
   </aside>
-
 
   <main class="flex-fill p-3">
