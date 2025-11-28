@@ -6,6 +6,9 @@ require_once "includes/header.php";
 
 if (!isset($conn) || !$conn) die('❌ Conexión a la base de datos no disponible. Revisa db.php');
 
+// -------------------------
+// Manejo de acciones POST (CRUD / AJAX)
+// -------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json; charset=utf-8');
     $action = $_POST['action'];
@@ -14,17 +17,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($action === 'add_comment') {
         $id_hist = intval($_POST['id_historial'] ?? 0);
         $id_prod = intval($_POST['id_producto'] ?? 0);
+
+        // si nos dieron id_hist buscamos id_equipo
         if ($id_prod <= 0 && $id_hist > 0) {
-            $resTmp = $conn->query("SELECT id_equipo FROM historial_estados WHERE id_historial = $id_hist LIMIT 1");
+            $resTmp = $conn->query("SELECT id_equipo FROM historial_estados WHERE id_historial = " . intval($id_hist) . " LIMIT 1");
             $id_prod = ($resTmp && $resTmp->num_rows) ? intval($resTmp->fetch_assoc()['id_equipo']) : 0;
         }
-        $usuario = $conn->real_escape_string(trim($_POST['usuario'] ?? 'Anonimo'));
-        $comentario = $conn->real_escape_string(trim($_POST['comentario'] ?? ''));
-        if ($id_prod <= 0 || $comentario === '') echo json_encode(['ok'=>false,'msg'=>'Parámetros incompletos.']), exit;
+
+        $usuario = trim($_POST['usuario'] ?? 'Anonimo');
+        $comentario = trim($_POST['comentario'] ?? '');
+
+        if ($id_prod <= 0 || $comentario === '') {
+            echo json_encode(['ok'=>false,'msg'=>'Parámetros incompletos.']);
+            exit;
+        }
+
+        // Prepared insert
+        $stmt = $conn->prepare("INSERT INTO comentarios (id_producto, usuario, comentario, fecha) VALUES (?, ?, ?, ?)");
         $fecha = date('Y-m-d H:i:s');
-        $ok = $conn->query("INSERT INTO comentarios (id_producto, usuario, comentario, fecha) VALUES ($id_prod,'$usuario','$comentario','$fecha')");
-        if ($ok) echo json_encode(['ok'=>true,'msg'=>'Comentario agregado.','comentario'=>['id_com'=>$conn->insert_id,'id_producto'=>$id_prod,'usuario'=>htmlspecialchars($usuario),'comentario'=>htmlspecialchars($comentario),'fecha'=>date('d/m/Y H:i',strtotime($fecha))]]); 
-        else echo json_encode(['ok'=>false,'msg'=>'Error al guardar comentario: '.$conn->error]);
+        $stmt->bind_param("isss", $id_prod, $usuario, $comentario, $fecha);
+        $ok = $stmt->execute();
+        if ($ok) {
+            $insert_id = $stmt->insert_id;
+            echo json_encode([
+                'ok'=>true,
+                'msg'=>'Comentario agregado.',
+                'comentario'=>[
+                    'id_com'=>intval($insert_id),
+                    'id_producto'=>$id_prod,
+                    'usuario'=>htmlspecialchars($usuario),
+                    'comentario'=>htmlspecialchars($comentario),
+                    'fecha'=>date('d/m/Y H:i',strtotime($fecha))
+                ]
+            ]);
+        } else {
+            echo json_encode(['ok'=>false,'msg'=>'Error al guardar comentario: '.$stmt->error]);
+        }
+        $stmt->close();
         exit;
     }
 
@@ -32,14 +61,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($action === 'get_comments') {
         $id_hist = intval($_POST['id_historial'] ?? 0);
         $id_prod = intval($_POST['id_producto'] ?? 0);
+
         if ($id_prod <= 0 && $id_hist > 0) {
-            $resTmp = $conn->query("SELECT id_equipo FROM historial_estados WHERE id_historial = $id_hist LIMIT 1");
+            $resTmp = $conn->query("SELECT id_equipo FROM historial_estados WHERE id_historial = " . intval($id_hist) . " LIMIT 1");
             $id_prod = ($resTmp && $resTmp->num_rows) ? intval($resTmp->fetch_assoc()['id_equipo']) : 0;
         }
-        if ($id_prod <= 0) echo json_encode(['ok'=>false,'msg'=>'ID inválido.']), exit;
-        $q = $conn->query("SELECT id_com, id_producto, usuario, comentario, fecha FROM comentarios WHERE id_producto=$id_prod ORDER BY fecha DESC");
+
+        if ($id_prod <= 0) {
+            echo json_encode(['ok'=>false,'msg'=>'ID inválido.']);
+            exit;
+        }
+
+        $stmt = $conn->prepare("SELECT id_com, id_producto, usuario, comentario, fecha FROM comentarios WHERE id_producto = ? ORDER BY fecha DESC");
+        $stmt->bind_param("i", $id_prod);
+        $stmt->execute();
+        $res = $stmt->get_result();
         $rows = [];
-        while ($row = $q->fetch_assoc()) $rows[]=['id_com'=>$row['id_com'],'usuario'=>htmlspecialchars($row['usuario']),'comentario'=>htmlspecialchars($row['comentario']),'fecha'=>date('d/m/Y H:i',strtotime($row['fecha']))];
+        while ($row = $res->fetch_assoc()) {
+            $rows[] = [
+                'id_com' => intval($row['id_com']),
+                'usuario' => htmlspecialchars($row['usuario']),
+                'comentario' => htmlspecialchars($row['comentario']),
+                'fecha' => date('d/m/Y H:i', strtotime($row['fecha']))
+            ];
+        }
+        $stmt->close();
         echo json_encode(['ok'=>true,'comentarios'=>$rows]);
         exit;
     }
@@ -47,25 +93,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // --- Obtener detalle de historial ---
     if ($action === 'get_detail') {
         $id_hist = intval($_POST['id_historial'] ?? 0);
-        if ($id_hist <= 0) echo json_encode(['ok'=>false,'msg'=>'ID inválido para detalle.']), exit;
-        $r = $conn->query("SELECT h.id_historial,h.id_equipo,e.codigo_equipo,e.marca,e.modelo,h.estado_anterior,h.estado_nuevo,h.usuario,h.fecha,h.detalle FROM historial_estados h LEFT JOIN equipos e ON e.id_equipo=h.id_equipo WHERE h.id_historial=$id_hist LIMIT 1");
-        if (!$r || $r->num_rows===0) echo json_encode(['ok'=>false,'msg'=>'Registro no encontrado.']), exit;
-        $row = $r->fetch_assoc();
-        $equipoText = ($row['codigo_equipo']? $row['codigo_equipo'].' - ':'').trim($row['marca'].' '.$row['modelo']);
-        echo json_encode(['ok'=>true,'record'=>['id_historial'=>intval($row['id_historial']),'id_equipo'=>intval($row['id_equipo']),'equipo'=>$equipoText,'estado_anterior'=>$row['estado_anterior'],'estado_nuevo'=>$row['estado_nuevo'],'usuario'=>$row['usuario'],'fecha'=>date('d/m/Y H:i',strtotime($row['fecha'])),'detalle'=>$row['detalle']]]);
+        if ($id_hist <= 0) { echo json_encode(['ok'=>false,'msg'=>'ID inválido para detalle.']); exit; }
+
+        $stmt = $conn->prepare("SELECT h.id_historial, h.id_equipo, e.codigo_equipo, e.marca, e.modelo, h.estado_anterior, h.estado_nuevo, h.usuario, h.fecha, h.detalle FROM historial_estados h LEFT JOIN equipos e ON e.id_equipo = h.id_equipo WHERE h.id_historial = ? LIMIT 1");
+        $stmt->bind_param("i", $id_hist);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if (!$res || $res->num_rows === 0) {
+            echo json_encode(['ok'=>false,'msg'=>'Registro no encontrado.']);
+            $stmt->close();
+            exit;
+        }
+        $row = $res->fetch_assoc();
+        $equipoText = ($row['codigo_equipo'] ? $row['codigo_equipo'].' - ' : '') . trim($row['marca'].' '.$row['modelo']);
+        $record = [
+            'id_historial' => intval($row['id_historial']),
+            'id_equipo' => intval($row['id_equipo']),
+            'equipo' => $equipoText,
+            'estado_anterior' => $row['estado_anterior'],
+            'estado_nuevo' => $row['estado_nuevo'],
+            'usuario' => $row['usuario'],
+            'fecha' => date('d/m/Y H:i', strtotime($row['fecha'])),
+            'detalle' => $row['detalle']
+        ];
+        $stmt->close();
+        echo json_encode(['ok'=>true,'record'=>$record]);
         exit;
     }
 
     // --- Check nuevos registros ---
-    if ($action==='check_new') {
+    if ($action === 'check_new') {
         $last = intval($_POST['last_max_id'] ?? 0);
-        $q = $conn->query("SELECT MAX(id_historial) AS maxid FROM historial_estados");
-        $maxid = $q->fetch_assoc()['maxid'] ?? 0;
-        if ($maxid>$last) {
-            $r = $conn->query("SELECT h.id_historial,h.id_equipo,e.codigo_equipo,e.marca,e.modelo,h.estado_nuevo,h.usuario,h.fecha FROM historial_estados h LEFT JOIN equipos e ON e.id_equipo=h.id_equipo WHERE h.id_historial=$maxid LIMIT 1")->fetch_assoc();
-            echo json_encode(['ok'=>true,'new'=>true,'maxid'=>intval($maxid),'record'=>['id'=>intval($r['id_historial']),'equipo'=>($r['codigo_equipo']?$r['codigo_equipo'].' - ':'').($r['marca'].' '.$r['modelo']),'estado_nuevo'=>$r['estado_nuevo'],'usuario'=>$r['usuario'],'fecha'=>date('d/m/Y H:i',strtotime($r['fecha']))]]);
-        } else echo json_encode(['ok'=>true,'new'=>false,'maxid'=>intval($maxid)]);
-        exit;
+        // obtener max id actual
+        $r = $conn->query("SELECT MAX(id_historial) AS maxid FROM historial_estados");
+        $maxid = intval($r->fetch_assoc()['maxid'] ?? 0);
+        if ($maxid > $last) {
+            $stmt = $conn->prepare("SELECT h.id_historial, h.id_equipo, e.codigo_equipo, e.marca, e.modelo, h.estado_nuevo, h.usuario, h.fecha FROM historial_estados h LEFT JOIN equipos e ON e.id_equipo = h.id_equipo WHERE h.id_historial = ? LIMIT 1");
+            $stmt->bind_param("i", $maxid);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $row = $res->fetch_assoc();
+            $equipoText = ($row['codigo_equipo'] ? $row['codigo_equipo'].' - ' : '') . ($row['marca'].' '.$row['modelo']);
+            echo json_encode([
+                'ok'=>true,
+                'new'=>true,
+                'maxid'=>intval($maxid),
+                'record'=>[
+                    'id'=>intval($row['id_historial']),
+                    'equipo'=>$equipoText,
+                    'estado_nuevo'=>$row['estado_nuevo'],
+                    'usuario'=>$row['usuario'],
+                    'fecha'=>date('d/m/Y H:i', strtotime($row['fecha']))
+                ]
+            ]);
+            $stmt->close();
+            exit;
+        } else {
+            echo json_encode(['ok'=>true,'new'=>false,'maxid'=>$maxid]);
+            exit;
+        }
     }
 
     echo json_encode(['ok'=>false,'msg'=>'Accion desconocida.']);
@@ -76,19 +162,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 $filtro_usuario = $conn->real_escape_string($_GET['usuario'] ?? '');
 $filtro_estado = $conn->real_escape_string($_GET['estado'] ?? '');
 $sql = "SELECT h.id_historial,h.id_equipo,e.codigo_equipo,e.marca,e.modelo,h.estado_anterior,h.estado_nuevo,h.usuario,h.fecha,h.detalle FROM historial_estados h LEFT JOIN equipos e ON e.id_equipo=h.id_equipo WHERE 1=1";
-if ($filtro_usuario!=='') $sql.=" AND h.usuario LIKE '%$filtro_usuario%'";
-if ($filtro_estado!=='') $sql.=" AND (h.estado_nuevo='$filtro_estado' OR h.estado_anterior='$filtro_estado')";
-$sql.=" ORDER BY h.fecha DESC";
-$res=$conn->query($sql);
+if ($filtro_usuario !== '') $sql .= " AND h.usuario LIKE '%$filtro_usuario%'";
+if ($filtro_estado !== '') $sql .= " AND (h.estado_nuevo='$filtro_estado' OR h.estado_anterior='$filtro_estado')";
+$sql .= " ORDER BY h.fecha DESC";
+$res = $conn->query($sql);
 
-$estadisticas=[
-    'total'=>intval($conn->query("SELECT COUNT(*) AS n FROM historial_estados")->fetch_assoc()['n'] ?? 0),
-    'reparado'=>intval($conn->query("SELECT COUNT(*) AS n FROM historial_estados WHERE estado_nuevo='Reparado'")->fetch_assoc()['n'] ?? 0),
-    'pendiente'=>intval($conn->query("SELECT COUNT(*) AS n FROM historial_estados WHERE estado_nuevo='Pendiente'")->fetch_assoc()['n'] ?? 0),
-    'en_reparacion'=>intval($conn->query("SELECT COUNT(*) AS n FROM historial_estados WHERE estado_nuevo='En reparación'")->fetch_assoc()['n'] ?? 0)
+$estadisticas = [
+    'total' => intval($conn->query("SELECT COUNT(*) AS n FROM historial_estados")->fetch_assoc()['n'] ?? 0),
+    'reparado' => intval($conn->query("SELECT COUNT(*) AS n FROM historial_estados WHERE estado_nuevo='Reparado'")->fetch_assoc()['n'] ?? 0),
+    'pendiente' => intval($conn->query("SELECT COUNT(*) AS n FROM historial_estados WHERE estado_nuevo='Pendiente'")->fetch_assoc()['n'] ?? 0),
+    'en_reparacion' => intval($conn->query("SELECT COUNT(*) AS n FROM historial_estados WHERE estado_nuevo='En reparación'")->fetch_assoc()['n'] ?? 0)
 ];
 
-$max_initial=intval($conn->query("SELECT MAX(id_historial) AS maxid FROM historial_estados")->fetch_assoc()['maxid'] ?? 0);
+$max_initial = intval($conn->query("SELECT MAX(id_historial) AS maxid FROM historial_estados")->fetch_assoc()['maxid'] ?? 0);
 ?>
 <!-- ===========================
      ESTILOS LOCALES (Timeline, dark mode, toasts)
@@ -265,7 +351,7 @@ body.dark-mode .t-item { background: linear-gradient(180deg, rgba(255,255,255,0.
 
 
                 </div>
-            
+
               </div>
             </div>
           </div>

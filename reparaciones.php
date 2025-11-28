@@ -1,5 +1,5 @@
 <?php
-// reparaciones.php — versión mejorada visualmente (mantiene lógica original)
+// reparaciones.php — versión mejorada visualmente (mantiene lógica original, con stock + "Dado de baja")
 session_start();
 require_once "db.php";
 require_once "includes/header.php";
@@ -41,11 +41,12 @@ if (isset($_POST['registrar'])) {
 }
 
 // =======================
-// CONTADORES DE ESTADO
+// CONTADORES DE ESTADO (agregado: Dado de baja)
 // =======================
-$pendientes   = $conn->query("SELECT COUNT(*) AS total FROM reparaciones WHERE estado='Pendiente'")->fetch_assoc()['total'] ?? 0;
-$enReparacion = $conn->query("SELECT COUNT(*) AS total FROM reparaciones WHERE estado='En reparación'")->fetch_assoc()['total'] ?? 0;
-$reparados    = $conn->query("SELECT COUNT(*) AS total FROM reparaciones WHERE estado='Reparado'")->fetch_assoc()['total'] ?? 0;
+$pendientes     = $conn->query("SELECT COUNT(*) AS total FROM reparaciones WHERE estado='Pendiente'")->fetch_assoc()['total'] ?? 0;
+$enReparacion   = $conn->query("SELECT COUNT(*) AS total FROM reparaciones WHERE estado='En reparación'")->fetch_assoc()['total'] ?? 0;
+$reparados      = $conn->query("SELECT COUNT(*) AS total FROM reparaciones WHERE estado='Reparado'")->fetch_assoc()['total'] ?? 0;
+$dadoDeBaja     = $conn->query("SELECT COUNT(*) AS total FROM reparaciones WHERE estado='Dado de baja'")->fetch_assoc()['total'] ?? 0;
 
 // =======================
 // FILTROS (mantengo tu lógica)
@@ -57,16 +58,19 @@ $f_estado  = $_GET['f_estado'] ?? '';
 
 if ($f_equipo)  $where[] = "(e.codigo_equipo LIKE '%".$conn->real_escape_string($f_equipo)."%' OR e.marca LIKE '%".$conn->real_escape_string($f_equipo)."%' OR e.modelo LIKE '%".$conn->real_escape_string($f_equipo)."%')";
 if ($f_tecnico) $where[] = "r.tecnico LIKE '%".$conn->real_escape_string($f_tecnico)."%'";
+// Permite filtrar por cualquiera de los estados (incluye 'Dado de baja')
 if ($f_estado)  $where[] = "r.estado='".$conn->real_escape_string($f_estado)."'";
 
 $whereSQL = count($where) ? "WHERE ".implode(" AND ", $where) : "";
 
 // =======================
-// CONSULTA PRINCIPAL (idéntica a la tuya)
+// CONSULTA PRINCIPAL (idéntica a la tuya, añadimos stock_total desde tabla stock)
 // =======================
+// Se asume que stock.id_producto corresponde a equipos.id_equipo
 $res = $conn->query("
     SELECT r.id_reparacion, r.problema, r.tecnico, r.fecha_inicio, r.fecha_fin, r.solucion, r.estado, r.usuario_registra,
-           e.codigo_equipo, e.marca, e.modelo
+           e.codigo_equipo, e.marca, e.modelo, e.id_equipo,
+           (SELECT COALESCE(SUM(s.cantidad),0) FROM stock s WHERE s.id_producto = e.id_equipo) AS stock_total
     FROM reparaciones r
     LEFT JOIN equipos e ON e.id_equipo = r.id_equipo
     $whereSQL
@@ -153,31 +157,37 @@ body.dark-mode {
       <div class="d-flex gap-2 align-items-center">
         <button id="theme-toggle" class="btn btn-sm btn-ghost">🌙</button>
         <button class="btn btn-outline-secondary btn-sm" id="help-btn" title="Ayuda rápida"><i class="bi bi-question-circle"></i></button>
-        <!-- Botón abre modal para registrar (ahora usamos modal para mantener la lógica) -->
+        <!-- Botón abre modal para registrar -->
         <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalRegistrar">
           <i class="bi bi-plus-circle"></i> Nueva reparación
         </button>
       </div>
     </div>
 
-    <!-- STAT CARDS -->
+    <!-- STAT CARDS (ahora 4 incluyendo Dado de baja) -->
     <div class="row stats g-3 mb-4">
-      <div class="col-md-4">
+      <div class="col-md-3">
         <div class="card card-soft p-3 text-center">
           <div class="small-muted">Pendientes</div>
           <div class="fs-3 fw-bold text-danger"><?= intval($pendientes) ?></div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-3">
         <div class="card card-soft p-3 text-center">
           <div class="small-muted">En reparación</div>
           <div class="fs-3 fw-bold text-warning"><?= intval($enReparacion) ?></div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-3">
         <div class="card card-soft p-3 text-center">
           <div class="small-muted">Reparados</div>
           <div class="fs-3 fw-bold text-success"><?= intval($reparados) ?></div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card card-soft p-3 text-center">
+          <div class="small-muted">Dado de baja</div>
+          <div class="fs-3 fw-bold text-secondary"><?= intval($dadoDeBaja) ?></div>
         </div>
       </div>
     </div>
@@ -193,6 +203,7 @@ body.dark-mode {
             <option value="En reparación" <?= $f_estado=='En reparación'?'selected':'' ?>>En reparación</option>
             <option value="Reparado" <?= $f_estado=='Reparado'?'selected':'' ?>>Reparado</option>
             <option value="Pendiente" <?= $f_estado=='Pendiente'?'selected':'' ?>>Pendiente</option>
+            <option value="Dado de baja" <?= $f_estado=='Dado de baja'?'selected':'' ?>>Dado de baja</option>
           </select>
           <button type="submit" class="btn btn-primary btn-sm">Aplicar</button>
           <a href="reparaciones.php" class="btn btn-outline-secondary btn-sm">Reset</a>
@@ -205,7 +216,7 @@ body.dark-mode {
       </div>
     </div>
 
-    <!-- TABLE -->
+    <!-- TABLE (añadida columna Stock) -->
     <div class="card card-soft p-3 shadow-sm">
       <div class="table-responsive">
         <table class="table table-hover table-sm align-middle" id="tabla-reparaciones">
@@ -213,6 +224,7 @@ body.dark-mode {
             <tr>
               <th>ID</th>
               <th>Equipo</th>
+              <th>Stock</th>
               <th>Problema</th>
               <th>Técnico</th>
               <th>Fecha inicio</th>
@@ -225,12 +237,17 @@ body.dark-mode {
           <tbody>
             <?php while($r=$res->fetch_assoc()):
                 $estado_normalizado = strtolower($r['estado']);
-                // Mantengo los colores lógicos previos pero con mapeo seguro
-                $badge = $estado_normalizado=='reparado'?'success':($estado_normalizado=='en reparación'?'warning':($estado_normalizado=='pendiente'?'danger':'secondary'));
+                // Mapeo seguro para badges (ahora incluye 'dado de baja')
+                $badge = 'secondary';
+                if ($estado_normalizado === 'reparado') $badge = 'success';
+                elseif ($estado_normalizado === 'en reparación' || $estado_normalizado === 'en reparacion') $badge = 'warning';
+                elseif ($estado_normalizado === 'pendiente') $badge = 'danger';
+                elseif ($estado_normalizado === 'dado de baja') $badge = 'dark';
             ?>
             <tr>
               <td><?= intval($r['id_reparacion']) ?></td>
               <td><?= htmlspecialchars($r['codigo_equipo'].' - '.$r['marca'].' '.$r['modelo']) ?></td>
+              <td><?= intval($r['stock_total']) ?></td>
               <td><?= htmlspecialchars($r['problema']) ?></td>
               <td><?= htmlspecialchars($r['tecnico']) ?></td>
               <td><?= htmlspecialchars(date('d-m-Y',strtotime($r['fecha_inicio']))) ?></td>
@@ -253,6 +270,7 @@ body.dark-mode {
 
 <!-- ===========================
      MODAL: Registrar reparación (mantiene campos y funcionalidad)
+     - El select de equipo ahora muestra stock entre paréntesis al lado del equipo.
      =========================== -->
 <div class="modal fade" id="modalRegistrar" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -268,9 +286,12 @@ body.dark-mode {
             <select name="id_equipo" class="form-select" required>
               <option value="">-- Seleccionar equipo --</option>
               <?php
+              // Para cada equipo añadimos el stock total en la etiqueta (sin cambiar la lógica del form)
               $equipos = $conn->query("SELECT id_equipo,codigo_equipo,marca,modelo FROM equipos ORDER BY codigo_equipo ASC");
               while($eq=$equipos->fetch_assoc()){
-                  echo "<option value='".$eq['id_equipo']."'>".htmlspecialchars($eq['codigo_equipo'].' - '.$eq['marca'].' '.$eq['modelo'])."</option>";
+                  $stockRow = $conn->query("SELECT COALESCE(SUM(cantidad),0) AS total FROM stock WHERE id_producto = '".$eq['id_equipo']."'")->fetch_assoc();
+                  $stockCount = intval($stockRow['total'] ?? 0);
+                  echo "<option value='".$eq['id_equipo']."'>".htmlspecialchars($eq['codigo_equipo'].' - '.$eq['marca'].' '.$eq['modelo'])." (stock: ".$stockCount.")</option>";
               }
               ?>
             </select>
@@ -287,6 +308,7 @@ body.dark-mode {
               <option value="En reparación">En reparación</option>
               <option value="Reparado">Reparado</option>
               <option value="Pendiente">Pendiente</option>
+              <option value="Dado de baja">Dado de baja</option>
             </select>
           </div>
 
@@ -331,7 +353,7 @@ body.dark-mode {
 </div>
 
 <!-- ===========================
-     SCRIPTS: Bootstrap + UI behaviour
+     SCRIPTS: Bootstrap + UI behaviour (sin cambios funcionales)
      =========================== -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

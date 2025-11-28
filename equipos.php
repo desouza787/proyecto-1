@@ -1,11 +1,4 @@
 <?php
-// equipos.php (MEJORADO + integración QR + Excel masivo + MAC + marcas/modelos + no cambiar visual ni lógica)
-// Nota: Este archivo respeta tu UI y la lógica existente; añade funcionalidades solicitadas.
-// Requisitos: PhpSpreadsheet opcional (para xlsx). Si no está instalado, se usa CSV como fallback para import masivo.
-// QR generation uses api.qrserver.com (public). Si prefieres local php qrcode library, lo puedo adaptar.
-//
-// Importante: antes de usar en producción, revisa permisos de carpetas (uploads/ y qrs/) y la disponibilidad
-// de allow_url_fopen en php.ini si se usa file_get_contents para descargar el QR.
 
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);

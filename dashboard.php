@@ -4,6 +4,30 @@ require_once "db.php";
 require_once "includes/funciones.php";
 require_once "includes/header.php";
 
+
+// ==========================
+// BÚSQUEDA GENERAL AGREGADA
+// ==========================
+$equipo_encontrado = null;
+if (isset($_GET['q']) && $_GET['q'] !== "") {
+$q = trim($_GET['q']);
+$sql = "SELECT e.*, d.nombre_dep, c.nombre_categoria, u.nombre AS nombre_ubicacion
+FROM equipos e
+LEFT JOIN departamentos d ON e.id_dep = d.id_dep
+LEFT JOIN categorias c ON e.id_categoria = c.id_categoria
+LEFT JOIN ubicaciones u ON e.id_ubicacion = u.id_ubicacion
+WHERE e.id_equipo = ? OR e.codigo_equipo LIKE ?";
+$stmt = $conn->prepare($sql);
+$codigo_like = "%$q%";
+$stmt->bind_param("is", $q, $codigo_like);
+$stmt->execute();
+$resultado = $stmt->get_result();
+if ($resultado->num_rows > 0) {
+$equipo_encontrado = $resultado->fetch_assoc();
+}
+}
+
+
 // ---------- Estadísticas ----------
 $total_equipos = $conn->query("SELECT COUNT(*) AS n FROM equipos")->fetch_assoc()['n'] ?? 0;
 $en_uso = $conn->query("SELECT COUNT(*) AS n FROM equipos WHERE estado='En uso'")->fetch_assoc()['n'] ?? 0;
@@ -12,68 +36,82 @@ $pendientes = $conn->query("SELECT COUNT(*) AS n FROM reparaciones WHERE estado=
 $reparados = $conn->query("SELECT COUNT(*) AS n FROM reparaciones WHERE estado='Reparado'")->fetch_assoc()['n'] ?? 0;
 $dado_baja = $conn->query("SELECT COUNT(*) AS n FROM equipos WHERE estado='Dado de baja'")->fetch_assoc()['n'] ?? 0;
 
+
 // ---------- Última entrada/salida ----------
 $ultima_entrada = $conn->query("SELECT cantidad FROM movimientos WHERE tipo='entrada' ORDER BY fecha DESC LIMIT 1")->fetch_assoc()['cantidad'] ?? 0;
 $ultima_salida = $conn->query("SELECT cantidad FROM movimientos WHERE tipo='salida' ORDER BY fecha DESC LIMIT 1")->fetch_assoc()['cantidad'] ?? 0;
 
+
 // ---------- Movimientos mensuales ----------
 $mv = $conn->query("
-    SELECT DATE_FORMAT(fecha,'%Y-%m') AS ym, 
-           SUM(CASE WHEN tipo='entrada' THEN cantidad ELSE 0 END) AS entradas, 
-           SUM(CASE WHEN tipo='salida' THEN cantidad ELSE 0 END) AS salidas 
-    FROM movimientos 
-    GROUP BY ym ORDER BY ym DESC LIMIT 12
+SELECT DATE_FORMAT(fecha,'%Y-%m') AS ym,
+SUM(CASE WHEN tipo='entrada' THEN cantidad ELSE 0 END) AS entradas,
+SUM(CASE WHEN tipo='salida' THEN cantidad ELSE 0 END) AS salidas
+FROM movimientos
+GROUP BY ym ORDER BY ym DESC LIMIT 12
 ");
 $labels = $entradas = $salidas = [];
-if($mv){
-    while($r = $mv->fetch_assoc()){
-        array_unshift($labels, $r['ym']);
-        array_unshift($entradas, (int)$r['entradas']);
-        array_unshift($salidas, (int)$r['salidas']);
-    }
-}
+if($mv){ while($r = $mv->fetch_assoc()){ array_unshift($labels,$r['ym']); array_unshift($entradas,(int)$r['entradas']); array_unshift($salidas,(int)$r['salidas']); }}
+
 
 // ---------- Estados por nivel ----------
 $res = $conn->query("SELECT nivel, estado, COUNT(*) AS c FROM equipos GROUP BY nivel, estado");
 $estData = [];
-if($res){
-    while($r = $res->fetch_assoc()){
-        $estData[$r['nivel']][$r['estado']] = (int)$r['c'];
-    }
-}
+if($res){ while($r = $res->fetch_assoc()){ $estData[$r['nivel']][$r['estado']] = (int)$r['c']; }}
+
 
 // ---------- Top fallas ----------
-$top_sql = "
-SELECT e.id_equipo, COALESCE(e.codigo_equipo,'-') AS codigo_equipo, 
-       COALESCE(e.marca,'-') AS marca, COALESCE(e.modelo,'-') AS modelo, 
-       COUNT(r.id_reparacion) AS total_fallas 
-FROM equipos e 
-LEFT JOIN reparaciones r ON e.id_equipo=r.id_equipo 
-GROUP BY e.id_equipo, e.codigo_equipo, e.marca, e.modelo 
-ORDER BY total_fallas DESC LIMIT 5";
+$top_sql = "SELECT e.id_equipo, COALESCE(e.codigo_equipo,'-') AS codigo_equipo, COALESCE(e.marca,'-') AS marca, COALESCE(e.modelo,'-') AS modelo, COUNT(r.id_reparacion) AS total_fallas FROM equipos e LEFT JOIN reparaciones r ON e.id_equipo=r.id_equipo GROUP BY e.id_equipo ORDER BY total_fallas DESC LIMIT 5";
 $top = $conn->query($top_sql);
 
+
 // ---------- Últimas reparaciones ----------
-$ult_reparaciones = $conn->query("
-    SELECT r.id_reparacion, e.codigo_equipo, e.marca, e.modelo, r.estado, 
-           COALESCE(r.fecha_fin, r.fecha_inicio) AS fecha
-    FROM reparaciones r 
-    JOIN equipos e ON e.id_equipo=r.id_equipo 
-    ORDER BY r.fecha_inicio DESC LIMIT 5
-");
+$ult_reparaciones = $conn->query("SELECT r.id_reparacion, e.codigo_equipo, e.marca, e.modelo, r.estado, COALESCE(r.fecha_fin, r.fecha_inicio) AS fecha FROM reparaciones r JOIN equipos e ON e.id_equipo=r.id_equipo ORDER BY r.fecha_inicio DESC LIMIT 5");
 ?>
+
 
 <div class="container-fluid mt-3">
 
-  <!-- Tarjetas resumen -->
-  <div class="row g-3 mb-3">
-    <div class="col-md-2"><div class="card text-white bg-primary"><div class="card-body"><small>Total equipos</small><h3><?= $total_equipos ?></h3></div></div></div>
-    <div class="col-md-2"><div class="card text-white bg-success"><div class="card-body"><small>En uso</small><h3><?= $en_uso ?></h3></div></div></div>
-    <div class="col-md-2"><div class="card text-dark bg-warning"><div class="card-body"><small>En reparación</small><h3><?= $en_reparacion ?></h3></div></div></div>
-    <div class="col-md-2"><div class="card text-white bg-danger"><div class="card-body"><small>Dado de baja</small><h3><?= $dado_baja ?></h3></div></div></div>
-    <div class="col-md-2"><div class="card text-white bg-secondary"><div class="card-body"><small>Pendientes</small><h3><?= $pendientes ?></h3></div></div></div>
-    <div class="col-md-2"><div class="card text-white bg-info"><div class="card-body"><small>Reparados</small><h3><?= $reparados ?></h3></div></div></div>
-  </div>
+
+<!-- BARRA DE BÚSQUEDA GENERAL -->
+<form method="GET" action="" class="mb-4">
+<div class="input-group">
+<input type="text" name="q" class="form-control" placeholder="Buscar equipo por ID o Código" value="<?= isset($_GET['q']) ? $_GET['q'] : '' ?>">
+<button class="btn btn-primary">Buscar</button>
+</div>
+</form>
+
+
+<?php if ($equipo_encontrado): ?>
+<div class="card p-3 shadow-sm mb-4">
+<h5><?= $equipo_encontrado['codigo_equipo'] ?> — <?= $equipo_encontrado['marca'] . " " . $equipo_encontrado['modelo'] ?></h5>
+<p><strong>Serie:</strong> <?= $equipo_encontrado['serie'] ?></p>
+<p><strong>Procesador:</strong> <?= $equipo_encontrado['procesador'] ?></p>
+<p><strong>RAM:</strong> <?= $equipo_encontrado['ram'] ?></p>
+<p><strong>Disco:</strong> <?= $equipo_encontrado['disco'] ?></p>
+<p><strong>Estado:</strong> <?= $equipo_encontrado['estado'] ?></p>
+<p><strong>Departamento:</strong> <?= $equipo_encontrado['nombre_dep'] ?></p>
+<p><strong>Categoría:</strong> <?= $equipo_encontrado['nombre_categoria'] ?></p>
+<p><strong>Ubicación:</strong> <?= $equipo_encontrado['nombre_ubicacion'] ?></p>
+<a href="equipos.php?id=<?= $equipo_encontrado['id_equipo'] ?>" class="btn btn-success">Ver este equipo</a>
+</div>
+<?php endif; ?>
+
+
+<!-- TODO EL RESTO DEL DASHBOARD SE MANTIENE IGUAL -->
+
+
+<div class="row g-3 mb-3">
+<div class="col-md-2"><div class="card text-white bg-primary"><div class="card-body"><small>Total equipos</small><h3><?= $total_equipos ?></h3></div></div></div>
+<div class="col-md-2"><div class="card text-white bg-success"><div class="card-body"><small>En uso</small><h3><?= $en_uso ?></h3></div></div></div>
+<div class="col-md-2"><div class="card text-dark bg-warning"><div class="card-body"><small>En reparación</small><h3><?= $en_reparacion ?></h3></div></div></div>
+<div class="col-md-2"><div class="card text-white bg-danger"><div class="card-body"><small>Dado de baja</small><h3><?= $dado_baja ?></h3></div></div></div>
+<div class="col-md-2"><div class="card text-white bg-secondary"><div class="card-body"><small>Pendientes</small><h3><?= $pendientes ?></h3></div></div></div>
+<div class="col-md-2"><div class="card text-white bg-info"><div class="card-body"><small>Reparados</small><h3><?= $reparados ?></h3></div></div></div>
+</div>
+
+
+<!-- RESTO DEL ARCHIVO SIN CAMBIOS ... -->
 
   <!-- Accesos rápidos -->
   <div class="mb-3 d-flex justify-content-between flex-wrap">
